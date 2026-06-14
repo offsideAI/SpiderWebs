@@ -1,0 +1,29 @@
+{
+  "name": "@spiderwebs/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpiderWebs configuration loading (cosmiconfig), defaults, and env-only secrets",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "@spiderwebs/schema": "workspace:*",
+    "cosmiconfig": "9.0.2",
+    "zod": "4.4.3"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "fixture-package-json",
+  "private": true,
+  "spiderwebs": {
+    "offline": true,
+    "agent": {
+      "enabled": false
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "failOn": "medium",
+  "report": {
+    "formats": ["json", "sarif"]
+  },
+  "ignore": ["**/test/fixtures/**"]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@spiderwebs/schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared zod schemas and types for SpiderWebs (Component, Finding, Advisory, Report, RunEvent)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

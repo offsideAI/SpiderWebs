@@ -1,0 +1,6 @@
+failOn: critical
+licensePolicy:
+  deny:
+    - AGPL-3.0
+  warn:
+    - GPL-3.0

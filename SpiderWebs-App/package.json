@@ -1,0 +1,33 @@
+{
+  "name": "spiderwebs-monorepo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "SpiderWebs — agentic, CLI-first + TUI defensive security auditor for remote Git repositories",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@11.1.1",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "check": "pnpm build && pnpm lint && pnpm format && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@vitest/coverage-v8": "4.1.8",
+    "eslint": "10.5.0",
+    "prettier": "3.8.4",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.61.0",
+    "vitest": "4.1.8"
+  }
+}

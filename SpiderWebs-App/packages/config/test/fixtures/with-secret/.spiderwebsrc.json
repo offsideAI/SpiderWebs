@@ -1,0 +1,6 @@
+{
+  "failOn": "high",
+  "github": {
+    "token": "ghp_thisShouldNeverBeAccepted000000000000"
+  }
+}

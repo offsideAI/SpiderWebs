@@ -1,0 +1,29 @@
+{
+  "name": "@spiderwebs/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpiderWebs core: typed event bus, logging, exit-code policy",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "@spiderwebs/schema": "workspace:*",
+    "pino": "10.3.1",
+    "pino-pretty": "13.1.3"
+  }
+}
