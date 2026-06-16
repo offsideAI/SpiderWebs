@@ -258,6 +258,12 @@ finding / patch-plan step) or the CLI (`spiderwebs fix`).
 - **Nothing leaves the machine without confirmation.** The TUI shows a diff + target and requires
   an explicit keypress; the CLI requires interactive confirmation or `--yes`. `--dry-run` performs
   every step *except* push/PR and prints the diff and the PR it *would* open.
+- **Dry-run in the TUI.** Dry-run is a first-class mode in the dashboard, not just a CLI flag:
+  it can be set at launch (`--dry-run`) and toggled live with the `D` key. While dry-run is
+  active, `F` runs the fix to a local commit and shows the diff + the PR it *would* open, but
+  never pushes and never shows the push/PR consent prompt. The active mode is shown in the UI so
+  the user always knows whether a fix will push. Turning dry-run off restores the consent-gated
+  real fix.
 - Never force-push; never reuse/overwrite an unrelated branch; never touch the user's working tree.
 - Only acts on a repository the authenticated user explicitly selected.
 - Rate-aware and idempotent: re-running detects an existing SpiderWebs branch/PR instead of
@@ -373,8 +379,15 @@ A keyboard-driven Ink app. Three primary views, switchable via tabs / hotkeys.
   resolved per step, and a breaking-change risk badge.
 - `e` export report (md/json/sarif/html), `c` copy plan to clipboard.
 
-**Global keys:** `tab` switch view, `q` quit, `?` help overlay, arrows/`j`/`k` navigate,
-`enter` select. Respect `NO_COLOR` and degrade gracefully on dumb terminals (auto `--ci`).
+**Guided fix (Findings / Patch plan):**
+- `F` starts a guided fix for the selected package (§5.11): live progress, then a diff + consent
+  prompt before any push/PR.
+- `D` toggles **dry-run mode**; the current mode is shown in the header. In dry-run, `F` previews
+  the diff and the PR it would open without pushing or prompting. Dry-run can also be set at
+  launch with `--dry-run`.
+
+**Global keys:** `tab` switch view, `q` quit, `?` help overlay, `D` toggle dry-run, arrows/`j`/`k`
+navigate, `enter` select. Respect `NO_COLOR` and degrade gracefully on dumb terminals (auto `--ci`).
 
 ---
 

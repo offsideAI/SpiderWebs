@@ -30,7 +30,7 @@ References like `§5.2` point at PRD sections; `M1`–`M6` are the PRD §14 mile
 | 13. Security & privacy of the tool | ✅ done for shipped surface |
 | 14. Testing & quality | 🟡 unit/integration/TUI done; differential & snapshot pending |
 | 15. Packaging & distribution | ⬜ not started |
-| 16. Guided remediation (auto-fix → PR) | 🟡 engine done & mock-tested (16.1–16.7); TUI/CLI surfacing next (M7) |
+| 16. Guided remediation (auto-fix → PR) | ✅ engine + TUI `F` + `spiderwebs fix`, mock-tested (M7) |
 
 Headline gap: the deterministic engine works and is exercised by the **TUI**, but it is **not yet
 wired into the `spiderwebs` CLI**, and there are **no file report formats** — so the "scriptable CI"
@@ -316,15 +316,16 @@ half of the vision (§2, §16) is not yet reachable.
 
 ---
 
-## Epic 16 — Guided Remediation: Auto-fix → PR (§5.11) 🟡 (M7) — **active build**
+## Epic 16 — Guided Remediation: Auto-fix → PR (§5.11) ✅ (M7)
 
 Decisions: auth **delegates to the `gh` CLI**; fixes regenerate the **manifest + lockfile** via the
 package manager with `--ignore-scripts`; scope is **direct dependencies only** to start. Every
 network-mutating step requires explicit consent (`--yes` / interactive) and supports `--dry-run`.
 
-> Progress: the engine (16.1–16.7, 16.10 minus the TUI flow) is built and tested behind mocks —
-> workspace, planner, patcher, git, `gh` adapter, and `runFix` with the consent boundary. No code
-> has run a live push/PR yet. Remaining: surface it in the TUI (`F`, 16.8) and CLI (`fix`, 16.9).
+> Complete and mock-tested end to end — workspace, planner, patcher, git, `gh` adapter, `runFix`
+> with the consent boundary, plus the TUI `F` action and `spiderwebs fix` CLI. Every side effect is
+> behind an interface; **no automated test or build has performed a live push/fork/PR** — that only
+> happens when a user runs it against a real repo and confirms.
 
 ### Story 16.1 — In-repo throwaway workspace ✅
 - [✅] Clone target into `./.spiderwebs-workspace/<owner>-<repo>/` (inside cwd, not OS temp)
@@ -368,22 +369,30 @@ network-mutating step requires explicit consent (`--yes` / interactive) and supp
 - [✅] Never act on a repo the user didn't select; one PR per package upgrade
 - [✅] No tokens handled by SpiderWebs (gh owns auth); never force-push; conditional cleanup
 
-### Story 16.8 — TUI `F` action ⬜
-- [ ] `F` on a finding / patch-plan step launches the fix flow
-- [ ] In-TUI diff + target preview + explicit confirm keypress; `--dry-run` aware
-- [ ] Live progress + result (PR link / error) surfaced in the UI
+### Story 16.8 — TUI `F` action ✅
+- [✅] `F` on a finding / patch-plan step launches the fix flow
+- [✅] In-TUI diff + target preview + explicit confirm keypress (consent boundary)
+- [✅] Live progress + result (PR link / error) surfaced in the UI
 
-### Story 16.9 — CLI `spiderwebs fix` ⬜
-- [ ] `spiderwebs fix <target> [--finding <id> | --all-direct] [--dry-run] [--yes] [--keep]`
-- [ ] Non-interactive consent via `--yes`; honest exit codes
-- [ ] Un-stub from the command shell
+### Story 16.9 — CLI `spiderwebs fix` ✅
+- [✅] `spiderwebs fix <target> [--finding <id> | --all-direct] [--dry-run] [--yes] [--keep]`
+- [✅] Non-interactive consent via `--yes`; honest exit codes
+- [✅] Un-stub from the command shell (one PR per package; interactive confirm by default)
 
-### Story 16.10 — Tests 🟡
+### Story 16.10 — Tests ✅
 - [✅] Fix planner unit tests (version selection, unfixable cases)
 - [✅] Patcher tests with a mock package-manager runner (asserts `--ignore-scripts`)
 - [✅] Orchestrator tests with mock git + mock `gh` (dry-run, fork path, direct-push path, idempotency)
 - [✅] Guardrail test: no push/PR without consent
-- [ ] TUI `F`-flow test (confirm + cancel) — with 16.8
+- [✅] TUI `F`-flow test (confirm + cancel)
+- [✅] CLI `fix` command test with injected fakes (selection, dry-run, --yes, errors)
+
+### Story 16.11 — TUI dry-run mode ✅
+- [✅] `--dry-run` launch flag for the TUI sets dry-run mode on
+- [✅] `D` toggles dry-run mode live; the active mode is shown in the header (`DRY-RUN` badge)
+- [✅] In dry-run, `F` runs to a local commit and shows the diff + intended PR — no push, no consent prompt
+- [✅] Dry-run result surfaced in the fix overlay (diff + "would open PR"); off restores the consent-gated fix
+- [✅] Tests: `D` toggles, and `F` in dry-run reaches a dry-run result without a consent prompt
 
 ---
 
@@ -398,7 +407,7 @@ network-mutating step requires explicit consent (`--yes` / interactive) and supp
 | **M4** — GitHub issue correlation | Octokit, prefilter, issue↔finding↔code | ⬜ not started |
 | **M5** — Agent harness | LLMProvider, tool contract, guardrails, patch-plan narrative, budget | ⬜ not started |
 | **M6** — Polish | secrets, code, license, HTML, `--baseline`, packaging, docs | ⬜ not started |
-| **M7** — Guided remediation | in-cwd workspace, direct-dep fix planner, manifest+lockfile patch (`--ignore-scripts`), `gh`-delegated fork/push/PR, TUI `F` + `spiderwebs fix`, consent/dry-run | ⬜ active build |
+| **M7** — Guided remediation | in-cwd workspace, direct-dep fix planner, manifest+lockfile patch (`--ignore-scripts`), `gh`-delegated fork/push/PR, TUI `F` + `spiderwebs fix`, consent/dry-run | ✅ done (mock-tested) |
 
 ## Active build
 

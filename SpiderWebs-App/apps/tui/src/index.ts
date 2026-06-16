@@ -1,24 +1,26 @@
 import { EventBus } from '@spiderwebs/core/bus';
-import { runScan, type RunScanOptions } from '@spiderwebs/scanner';
+import { runFix, runScan, type RunScanOptions } from '@spiderwebs/scanner';
 import { render } from 'ink';
 import { createElement } from 'react';
-import { App } from './components/App.js';
+import { App, type FixRequest } from './components/App.js';
 import { runHeadlessScan } from './headless.js';
 
 interface CliArgs {
   target?: string;
   offline: boolean;
   keep: boolean;
+  dryRun: boolean;
   ref?: string;
   subdir?: string;
 }
 
 function parseArgs(argv: readonly string[]): CliArgs {
-  const args: CliArgs = { offline: false, keep: false };
+  const args: CliArgs = { offline: false, keep: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (token === '--offline') args.offline = true;
     else if (token === '--keep') args.keep = true;
+    else if (token === '--dry-run') args.dryRun = true;
     else if (token === '--ref') args.ref = argv[++i];
     else if (token === '--subdir') args.subdir = argv[++i];
     else if (token && !token.startsWith('-') && !args.target) args.target = token;
@@ -65,10 +67,23 @@ async function main(): Promise<void> {
   }
 
   const bus = new EventBus();
+  const onFix = (request: FixRequest): ReturnType<typeof runFix> =>
+    runFix({
+      target: request.target,
+      findings: request.findings,
+      cwd: process.cwd(),
+      dryRun: request.dryRun,
+      ...(args.offline ? { offline: args.offline } : {}),
+      confirm: request.confirm,
+      onEvent: request.onEvent,
+    });
+
   const app = render(
     createElement(App, {
       bus,
       initialTarget: args.target,
+      onFix,
+      initialDryRun: args.dryRun,
       onStartScan: (targetUrl) => {
         const opts = { ...scanOptions(args), target: targetUrl };
         runScan(opts, bus).catch((error: unknown) => {

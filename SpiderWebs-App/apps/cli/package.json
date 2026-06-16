@@ -21,6 +21,7 @@
   "dependencies": {
     "@spiderwebs/config": "workspace:*",
     "@spiderwebs/core": "workspace:*",
+    "@spiderwebs/scanner": "workspace:*",
     "@spiderwebs/schema": "workspace:*",
     "commander": "15.0.0",
     "cosmiconfig": "9.0.2",

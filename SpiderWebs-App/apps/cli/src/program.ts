@@ -4,6 +4,7 @@ import { ExitCode } from '@spiderwebs/core';
 import { FAIL_ON_LEVELS, type FailOn } from '@spiderwebs/schema';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { CliError, NotImplementedError, type CliContext } from './context.js';
+import { defaultFixDeps, runFixCommand, type FixCommandOptions } from './fixCommand.js';
 
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require('../package.json') as { version: string };
@@ -76,6 +77,22 @@ export function buildProgram(ctx: CliContext): Command {
     .action(
       runAction(ctx, () => {
         throw new NotImplementedError('scan', 'Milestone 1 (deterministic SCA core)');
+      }),
+    );
+
+  program
+    .command('fix')
+    .description('scan, then patch direct-dependency vulnerabilities and open pull requests')
+    .argument('<target>', 'repo URL, org/repo shorthand, or local path')
+    .option('--finding <id>', 'fix only the finding with this id')
+    .option('--all-direct', 'fix every fixable direct dependency (default)')
+    .option('--dry-run', 'do everything except push/PR; show the diff and intended PR')
+    .option('-y, --yes', 'skip the confirmation prompt (non-interactive consent)')
+    .option('--keep', 'keep the .spiderwebs-workspace clone after the run')
+    .option('--offline', 'no network (cannot open PRs; useful with --dry-run on a local clone)')
+    .action(
+      runAction(ctx, async (target: string, options: Omit<FixCommandOptions, 'target'>) => {
+        ctx.exitCode = await runFixCommand(ctx, { target, ...options }, defaultFixDeps(ctx));
       }),
     );
 

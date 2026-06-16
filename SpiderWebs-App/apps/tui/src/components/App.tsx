@@ -1,5 +1,8 @@
 import type { EventBus } from '@spiderwebs/core';
+import type { FixConsentSummary, FixEvent, RunFixResult } from '@spiderwebs/scanner';
+import type { DependencyFinding } from '@spiderwebs/schema';
 import { Box, Text, useApp, useInput } from 'ink';
+import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import { useEffect, useMemo, useReducer, useState, type JSX } from 'react';
 import { visibleFindings, type SeverityFilter } from '../findings.js';
@@ -9,6 +12,21 @@ import { formatDuration } from '../theme.js';
 import { FindingsView } from './FindingsView.js';
 import { PatchPlanView } from './PatchPlanView.js';
 import { ProgressView } from './ProgressView.js';
+
+/** Request passed to the host to run a guided fix (PRD §5.11). */
+export interface FixRequest {
+  target: string;
+  findings: DependencyFinding[];
+  /** When true, commit + preview only — never push or open a PR. */
+  dryRun: boolean;
+  confirm: (summary: FixConsentSummary) => Promise<boolean>;
+  onEvent: (event: FixEvent) => void;
+}
+
+type FixSession =
+  | { phase: 'running'; pkg: string }
+  | { phase: 'confirm'; pkg: string; summary: FixConsentSummary; resolve: (ok: boolean) => void }
+  | { phase: 'done'; pkg: string; result: RunFixResult };
 
 type View = 'progress' | 'findings' | 'patch';
 const VIEW_ORDER: View[] = ['progress', 'findings', 'patch'];
@@ -25,6 +43,10 @@ export interface AppProps {
   initialTarget?: string;
   /** Callback triggered when the user enters a Git URL/path in TUI. */
   onStartScan?: (target: string) => void;
+  /** Runs a guided fix for a package (wired to runFix by the host). */
+  onFix?: (request: FixRequest) => Promise<RunFixResult>;
+  /** Start with dry-run mode on (the `--dry-run` launch flag). */
+  initialDryRun?: boolean;
   /** Disable real-process exit on quit (tests drive unmount themselves). */
   exitOnQuit?: boolean;
 }
@@ -34,7 +56,14 @@ function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }
 
-export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppProps): JSX.Element {
+export function App({
+  bus,
+  initialTarget,
+  onStartScan,
+  onFix,
+  initialDryRun = false,
+  exitOnQuit = true,
+}: AppProps): JSX.Element {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(reduce, undefined, initialRunState);
 
@@ -50,6 +79,9 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
   const [showHelp, setShowHelp] = useState(false);
   const [toast, setToast] = useState<string | undefined>();
   const [, forceTick] = useState(0);
+  const [fixSession, setFixSession] = useState<FixSession | null>(null);
+  const [fixSteps, setFixSteps] = useState<string[]>([]);
+  const [dryRun, setDryRun] = useState(initialDryRun);
 
   // Subscribe to the same event bus the headless renderer consumes (PRD §7.2).
   useEffect(() => bus.onAny(dispatch), [bus]);
@@ -78,12 +110,64 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
 
   const flash = (message: string): void => setToast(message);
 
+  const startFix = (packageName: string): void => {
+    if (!onFix || !target) return flash('fix is unavailable');
+    const pkgFindings = state.findings.filter(
+      (f): f is DependencyFinding =>
+        f.type === 'dependency' && f.component.name === packageName && f.fixedVersions.length > 0,
+    );
+    if (pkgFindings.length === 0) return flash('no fixable finding for this package');
+
+    setFixSteps([]);
+    setFixSession({ phase: 'running', pkg: packageName });
+    void onFix({
+      target,
+      findings: pkgFindings,
+      dryRun,
+      confirm: (summary) =>
+        new Promise<boolean>((resolve) => {
+          setFixSession({ phase: 'confirm', pkg: packageName, summary, resolve });
+        }),
+      onEvent: (event) => {
+        if (event.type === 'fix:step') setFixSteps((steps) => [...steps, event.message]);
+      },
+    })
+      .then((result) => setFixSession({ phase: 'done', pkg: packageName, result }))
+      .catch((error: unknown) =>
+        setFixSession({
+          phase: 'done',
+          pkg: packageName,
+          result: {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }),
+      );
+  };
+
   useInput((input, key) => {
     if (!target) {
       if (input === 'q' || key.escape || (key.ctrl && input === 'c')) {
         if (exitOnQuit) exit();
       }
       return;
+    }
+
+    // A fix in progress owns all input until it resolves or is dismissed.
+    if (fixSession) {
+      if (fixSession.phase === 'confirm') {
+        if (input === 'y' || input === 'Y') {
+          fixSession.resolve(true);
+          setFixSession({ phase: 'running', pkg: fixSession.pkg });
+        } else if (input === 'n' || input === 'N' || key.escape || key.return) {
+          fixSession.resolve(false);
+          setFixSession({ phase: 'running', pkg: fixSession.pkg });
+        }
+      } else if (fixSession.phase === 'done') {
+        setFixSession(null); // any key dismisses the result
+        setFixSteps([]);
+      }
+      return; // 'running' ignores input (no abort mid-flight)
     }
 
     // While typing a search query, only Escape/Enter are meaningful here;
@@ -108,6 +192,13 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
     }
     if (input === '?') {
       setShowHelp(true);
+      return;
+    }
+    if (input === 'D') {
+      setDryRun((on) => !on);
+      flash(
+        dryRun ? 'dry-run off — fixes will push after confirm' : 'dry-run on — fixes preview only',
+      );
       return;
     }
     if (key.tab) {
@@ -143,6 +234,11 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
       }
       if (input === 'e')
         return flash('exported findings → spiderwebs-out/ (demo: no file written)');
+      if (input === 'F') {
+        const selected = findings[clamp(findingsIndex, findings.length - 1)];
+        if (selected?.type !== 'dependency') return flash('not a dependency finding');
+        return startFix(selected.component.name);
+      }
     }
 
     if (view === 'patch') {
@@ -150,6 +246,11 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
       if (down) return setPatchIndex((i) => clamp(i + 1, patchSteps.length - 1));
       if (input === 'e') return flash('exported patch plan (demo: no file written)');
       if (input === 'c') return flash('copied patch plan to clipboard (demo)');
+      if (input === 'F') {
+        const step = patchSteps[clamp(patchIndex, patchSteps.length - 1)];
+        if (!step) return flash('no patch step selected');
+        return startFix(step.packageName);
+      }
     }
   });
 
@@ -197,9 +298,12 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
         status={state.done ? 'done' : 'scanning'}
         elapsed={formatDuration(elapsedMs)}
         view={view}
+        dryRun={dryRun}
       />
       <Box marginTop={1} flexDirection="column">
-        {showHelp ? (
+        {fixSession ? (
+          <FixOverlay session={fixSession} steps={fixSteps} />
+        ) : showHelp ? (
           <HelpOverlay />
         ) : view === 'progress' ? (
           <ProgressView state={state} />
@@ -237,11 +341,13 @@ function Header({
   status,
   elapsed,
   view,
+  dryRun,
 }: {
   target?: string;
   status: 'scanning' | 'done';
   elapsed: string;
   view: View;
+  dryRun: boolean;
 }): JSX.Element {
   return (
     <Box justifyContent="space-between">
@@ -252,6 +358,7 @@ function Header({
         <Text dimColor>{target ?? 'starting…'}</Text>
       </Box>
       <Box>
+        {dryRun ? <Text color="cyan">DRY-RUN · </Text> : null}
         <Text color={status === 'done' ? 'green' : 'yellow'}>
           {status === 'done' ? '✔ done' : '⠿ scanning'}
         </Text>
@@ -262,11 +369,118 @@ function Header({
 }
 
 function tabHints(view: View): string {
-  const common = 'tab views · ? help · q quit';
-  if (view === 'findings')
-    return `↑↓/jk move · f filter · / search · o open · e export · ${common}`;
-  if (view === 'patch') return `↑↓/jk move · e export · c copy · ${common}`;
+  const common = 'tab views · D dry-run · ? help · q quit';
+  if (view === 'findings') return `↑↓/jk move · F fix · f filter · / search · ${common}`;
+  if (view === 'patch') return `↑↓/jk move · F fix · e export · ${common}`;
   return `1/2/3 jump · ${common}`;
+}
+
+function truncateDiff(diff: string, maxLines = 16): string[] {
+  const lines = diff.split('\n');
+  if (lines.length <= maxLines) return lines;
+  return [...lines.slice(0, maxLines), `… (${lines.length - maxLines} more lines)`];
+}
+
+const FIX_STATUS_COLOR: Record<RunFixResult['status'], string> = {
+  'opened-pr': 'green',
+  'updated-pr': 'green',
+  committed: 'yellow',
+  'dry-run': 'cyan',
+  'gh-unavailable': 'yellow',
+  skipped: 'gray',
+  error: 'red',
+};
+
+function FixOverlay({ session, steps }: { session: FixSession; steps: string[] }): JSX.Element {
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+      <Text bold color="cyan">
+        Guided fix — {session.pkg}
+      </Text>
+      {steps.length > 0 ? (
+        <Box marginTop={1} flexDirection="column">
+          {steps.map((step, i) => (
+            <Text key={i} dimColor>
+              · {step}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+
+      {session.phase === 'running' ? (
+        <Box marginTop={1}>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> working…</Text>
+        </Box>
+      ) : session.phase === 'confirm' ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text>
+            Upgrade {session.summary.packageName} {session.summary.fromVersion} →{' '}
+            <Text color="green">{session.summary.toVersion}</Text>, push{' '}
+            <Text color="yellow">{session.summary.branch}</Text>, and open a PR to{' '}
+            <Text bold>{session.summary.target}</Text>?
+          </Text>
+          <Box
+            marginTop={1}
+            flexDirection="column"
+            borderStyle="single"
+            borderColor="gray"
+            paddingX={1}
+          >
+            {truncateDiff(session.summary.diff).map((line, i) => (
+              <Text
+                key={i}
+                color={line.startsWith('+') ? 'green' : line.startsWith('-') ? 'red' : undefined}
+                dimColor={!line.startsWith('+') && !line.startsWith('-')}
+              >
+                {line || ' '}
+              </Text>
+            ))}
+          </Box>
+          <Box marginTop={1}>
+            <Text color="green">[y]</Text>
+            <Text> push &amp; open PR </Text>
+            <Text color="red">[n]</Text>
+            <Text> cancel (keep the local commit)</Text>
+          </Box>
+        </Box>
+      ) : (
+        <Box marginTop={1} flexDirection="column">
+          <Text color={FIX_STATUS_COLOR[session.result.status]}>
+            {session.result.status}: {session.result.message}
+          </Text>
+          {session.result.diff ? (
+            <Box
+              marginTop={1}
+              flexDirection="column"
+              borderStyle="single"
+              borderColor="gray"
+              paddingX={1}
+            >
+              {truncateDiff(session.result.diff).map((line, i) => (
+                <Text
+                  key={i}
+                  color={line.startsWith('+') ? 'green' : line.startsWith('-') ? 'red' : undefined}
+                  dimColor={!line.startsWith('+') && !line.startsWith('-')}
+                >
+                  {line || ' '}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+          {session.result.prUrl ? <Text>{session.result.prUrl}</Text> : null}
+          {session.result.workspacePath ? (
+            <Text dimColor>workspace: {session.result.workspacePath}</Text>
+          ) : null}
+          <Box marginTop={1}>
+            <Text dimColor>press any key to continue</Text>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 function Footer({
@@ -313,6 +527,8 @@ function HelpOverlay(): JSX.Element {
     ['o', 'open advisory URL (findings)'],
     ['e', 'export report'],
     ['c', 'copy patch plan (patch)'],
+    ['F', 'fix selected package → PR (findings / patch)'],
+    ['D', 'toggle dry-run (preview fixes, no push)'],
     ['? ', 'toggle this help'],
     ['q', 'quit'],
   ];

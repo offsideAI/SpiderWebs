@@ -41,6 +41,9 @@ importers:
       '@spiderwebs/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@spiderwebs/scanner':
+        specifier: workspace:*
+        version: link:../../packages/scanner
       '@spiderwebs/schema':
         specifier: workspace:*
         version: link:../../packages/schema
