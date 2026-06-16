@@ -9,15 +9,31 @@ See [PRD.md](../PRD.md) for the full product requirements. **Status: Milestone 0
 
 ## Layout
 
-| Package           | Purpose                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
-| `apps/cli`        | `spiderwebs` commander CLI: `scan`, `report`, `sbom`, `db update`, `config`, `version`                 |
-| `packages/schema` | zod schemas/types: `Component`, `Advisory`, `Finding`, `Correlation`, `Report`, `RunEvent`, stable ids |
-| `packages/config` | cosmiconfig loader, defaults, PRD §10 precedence, env-only secrets guard                               |
-| `packages/core`   | typed event bus, pino logging (redacted), exit-code policy                                             |
+| Package            | Purpose                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `apps/cli`         | `spiderwebs` commander CLI: `scan`, `report`, `sbom`, `db update`, `config`, `version`                 |
+| `apps/tui`         | Ink terminal dashboard (3 views) — scans a real repo live, or `--demo` for mock data                   |
+| `packages/schema`  | zod schemas/types: `Component`, `Advisory`, `Finding`, `Correlation`, `Report`, `RunEvent`, stable ids |
+| `packages/config`  | cosmiconfig loader, defaults, PRD §10 precedence, env-only secrets guard                               |
+| `packages/core`    | typed event bus, pino logging (redacted), exit-code policy                                             |
+| `packages/scanner` | deterministic scan pipeline: ingest (clone/local) → npm/pnpm/yarn parsers → OSV lookup → `runScan`     |
 
-Further packages (`ingest`, `parsers`, `vulndb`, `report`, `github`, `correlate`, `enrich`,
-`agent`, `apps/tui`) arrive in later milestones (PRD §14).
+Further packages (`report`, `github`, `correlate`, `enrich`, `agent`) and the full
+PRD §7.1 package split arrive in later milestones (PRD §14).
+
+## Scan a real repository (TUI)
+
+```sh
+pnpm build
+node apps/tui/dist/index.js <path-or-repo>   # e.g. ., /path/to/repo, org/repo, https://…
+node apps/tui/dist/index.js <path> --offline # ingest + parse only, no network
+node apps/tui/dist/index.js --demo            # mock data, no real scan
+```
+
+The dashboard runs the deterministic pipeline live (ingest → parse lockfiles → query
+OSV.dev for known vulnerabilities) and streams findings into the three views. Remote
+targets are shallow-cloned into a temp workspace and cleaned up on exit; repo code is
+never executed. Under a pipe / non-TTY it prints a plain-text summary instead.
 
 ## Development
 

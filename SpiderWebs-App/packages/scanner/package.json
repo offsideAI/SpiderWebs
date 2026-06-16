@@ -1,9 +1,9 @@
 {
-  "name": "@spiderwebs/core",
+  "name": "@spiderwebs/scanner",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SpiderWebs core: typed event bus, logging, exit-code policy",
+  "description": "SpiderWebs deterministic scan pipeline: ingest → parse → OSV vulnerability lookup",
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
@@ -12,14 +12,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./bus": {
-      "types": "./dist/bus.d.ts",
-      "import": "./dist/bus.js"
-    },
-    "./exit": {
-      "types": "./dist/exit.d.ts",
-      "import": "./dist/exit.js"
     }
   },
   "files": [
@@ -30,8 +22,12 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
+    "@spiderwebs/core": "workspace:*",
     "@spiderwebs/schema": "workspace:*",
-    "pino": "10.3.1",
-    "pino-pretty": "13.1.3"
+    "p-limit": "7.3.0",
+    "p-retry": "8.0.0",
+    "simple-git": "3.36.0",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
   }
 }

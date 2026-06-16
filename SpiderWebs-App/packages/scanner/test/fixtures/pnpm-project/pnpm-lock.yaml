@@ -1,0 +1,28 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  minimist:
+    specifier: ^1.2.5
+    version: 1.2.5
+
+devDependencies:
+  rimraf:
+    specifier: ^3.0.2
+    version: 3.0.2
+
+packages:
+  /minimist@1.2.5:
+    resolution: { integrity: sha512-fixture }
+    dev: false
+
+  /lodash@4.17.20:
+    resolution: { integrity: sha512-fixture }
+    dev: false
+
+  /rimraf@3.0.2:
+    resolution: { integrity: sha512-fixture }
+    dev: true
+
+  /@babel/core@7.20.0:
+    resolution: { integrity: sha512-fixture }
+    dev: true
