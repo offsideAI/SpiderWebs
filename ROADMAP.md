@@ -30,6 +30,7 @@ References like `§5.2` point at PRD sections; `M1`–`M6` are the PRD §14 mile
 | 13. Security & privacy of the tool | ✅ done for shipped surface |
 | 14. Testing & quality | 🟡 unit/integration/TUI done; differential & snapshot pending |
 | 15. Packaging & distribution | ⬜ not started |
+| 16. Guided remediation (auto-fix → PR) | 🟡 engine done & mock-tested (16.1–16.7); TUI/CLI surfacing next (M7) |
 
 Headline gap: the deterministic engine works and is exercised by the **TUI**, but it is **not yet
 wired into the `spiderwebs` CLI**, and there are **no file report formats** — so the "scriptable CI"
@@ -315,6 +316,77 @@ half of the vision (§2, §16) is not yet reachable.
 
 ---
 
+## Epic 16 — Guided Remediation: Auto-fix → PR (§5.11) 🟡 (M7) — **active build**
+
+Decisions: auth **delegates to the `gh` CLI**; fixes regenerate the **manifest + lockfile** via the
+package manager with `--ignore-scripts`; scope is **direct dependencies only** to start. Every
+network-mutating step requires explicit consent (`--yes` / interactive) and supports `--dry-run`.
+
+> Progress: the engine (16.1–16.7, 16.10 minus the TUI flow) is built and tested behind mocks —
+> workspace, planner, patcher, git, `gh` adapter, and `runFix` with the consent boundary. No code
+> has run a live push/PR yet. Remaining: surface it in the TUI (`F`, 16.8) and CLI (`fix`, 16.9).
+
+### Story 16.1 — In-repo throwaway workspace ✅
+- [✅] Clone target into `./.spiderwebs-workspace/<owner>-<repo>/` (inside cwd, not OS temp)
+- [✅] Auto-add the workspace dir to `.gitignore` awareness; never touch the user's working tree
+- [✅] Reuse an existing clone when present; `--keep` retains, default cleans up
+- [✅] Path/zip-slip safety reused from ingest
+
+### Story 16.2 — Fix planner (direct deps) ✅
+- [✅] For a `DependencyFinding`, pick the minimal safe upgrade ≥ first-fixed-version (semver)
+- [✅] Resolve the manifest that declares the direct dep; compute the exact edit (operator preserved)
+- [✅] Skip / clearly report transitive-only or unfixable findings (no upstream fix)
+- [✅] Pure + unit-tested (no git, no network)
+
+### Story 16.3 — Manifest + lockfile patcher ✅
+- [✅] Edit `package.json` dependency range to the fixed version (indent/newline preserved)
+- [✅] Regenerate the lockfile via the matching PM (`npm`/`pnpm`/`yarn`) with `--ignore-scripts`
+- [✅] Package-manager invocation behind an interface (mockable; sandboxed to the clone)
+- [🟡] Manifest before/after captured; full unified diff (incl. lockfile) lands with git in 16.4
+
+### Story 16.4 — Git operations ✅
+- [✅] Create branch `spiderwebs/fix-<pkg>-<version>` (idempotent: detect existing)
+- [✅] Commit with advisory id(s) + finding id(s) in the message
+- [✅] Push to the correct remote (origin if writable, else fork); never force-push
+- [✅] All git side effects behind an interface (simple-git), mockable in tests
+
+### Story 16.5 — GitHub via `gh` CLI ✅
+- [✅] Adapter behind an interface: detect `gh` presence + auth (`gh auth status`)
+- [✅] Detect push permission on the target repo; fork when needed (`gh repo fork`)
+- [✅] Open the PR (`gh pr create`), cross-fork when forked; idempotent (detect existing PR)
+- [✅] Self-identified PR title/body (advisories resolved, version delta, breaking-change caution)
+- [✅] Graceful degrade when `gh` missing/unauthenticated → retain workspace + guidance
+
+### Story 16.6 — Orchestration: `runFix` ✅
+- [✅] Compose workspace → plan → patch → commit → (consent) → push → PR
+- [✅] Emit progress events via an `onEvent` callback (bus wiring lands with the TUI in 16.8)
+- [✅] `--dry-run` stops before push/PR and reports the diff + intended PR
+- [✅] Idempotency + clear result object (status, branch, PR url, workspace path)
+
+### Story 16.7 — Consent & safety guardrails ✅
+- [✅] Hard confirmation boundary before any push/fork/PR (interactive `confirm` or `yes`)
+- [✅] Never act on a repo the user didn't select; one PR per package upgrade
+- [✅] No tokens handled by SpiderWebs (gh owns auth); never force-push; conditional cleanup
+
+### Story 16.8 — TUI `F` action ⬜
+- [ ] `F` on a finding / patch-plan step launches the fix flow
+- [ ] In-TUI diff + target preview + explicit confirm keypress; `--dry-run` aware
+- [ ] Live progress + result (PR link / error) surfaced in the UI
+
+### Story 16.9 — CLI `spiderwebs fix` ⬜
+- [ ] `spiderwebs fix <target> [--finding <id> | --all-direct] [--dry-run] [--yes] [--keep]`
+- [ ] Non-interactive consent via `--yes`; honest exit codes
+- [ ] Un-stub from the command shell
+
+### Story 16.10 — Tests 🟡
+- [✅] Fix planner unit tests (version selection, unfixable cases)
+- [✅] Patcher tests with a mock package-manager runner (asserts `--ignore-scripts`)
+- [✅] Orchestrator tests with mock git + mock `gh` (dry-run, fork path, direct-push path, idempotency)
+- [✅] Guardrail test: no push/PR without consent
+- [ ] TUI `F`-flow test (confirm + cancel) — with 16.8
+
+---
+
 ## Milestone rollup (PRD §14)
 
 | Milestone | Scope | Status |
@@ -326,8 +398,16 @@ half of the vision (§2, §16) is not yet reachable.
 | **M4** — GitHub issue correlation | Octokit, prefilter, issue↔finding↔code | ⬜ not started |
 | **M5** — Agent harness | LLMProvider, tool contract, guardrails, patch-plan narrative, budget | ⬜ not started |
 | **M6** — Polish | secrets, code, license, HTML, `--baseline`, packaging, docs | ⬜ not started |
+| **M7** — Guided remediation | in-cwd workspace, direct-dep fix planner, manifest+lockfile patch (`--ignore-scripts`), `gh`-delegated fork/push/PR, TUI `F` + `spiderwebs fix`, consent/dry-run | ⬜ active build |
 
-## Recommended next push
+## Active build
+
+**Epic 16 — Guided Remediation (auto-fix → PR)** is the current focus, per product decision.
+Implementation order: 16.1 workspace → 16.2 fix planner → 16.3 patcher → 16.4 git → 16.5 `gh`
+→ 16.6 orchestration → 16.7 guardrails → 16.8 TUI `F` / 16.9 CLI `fix` → 16.10 tests. The
+network-mutating steps (push/fork/PR) land behind a consent boundary and a review checkpoint.
+
+## Recommended (deferred) next push
 
 Finish **M1 as a shippable CLI** (Epic 10 Story 10.2 + Epic 9 Story 9.2): wire `runScan` into
 `spiderwebs scan` with `--fail-on`/`--json`/`--out`, and add JSON + SARIF + Markdown renderers.

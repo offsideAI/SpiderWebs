@@ -166,7 +166,9 @@ export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppP
         <Text bold color="cyan">
           SpiderWebs — Security Scanner
         </Text>
-        <Text marginTop={1}>Please enter a repository path, local folder, or Git URL to scan:</Text>
+        <Box marginTop={1}>
+          <Text>Please enter a repository path, local folder, or Git URL to scan:</Text>
+        </Box>
         <Box marginTop={1}>
           <Text color="cyan">❯ </Text>
           <TextInput
