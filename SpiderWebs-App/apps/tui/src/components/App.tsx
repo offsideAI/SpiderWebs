@@ -34,12 +34,7 @@ function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }
 
-export function App({
-  bus,
-  initialTarget,
-  onStartScan,
-  exitOnQuit = true,
-}: AppProps): JSX.Element {
+export function App({ bus, initialTarget, onStartScan, exitOnQuit = true }: AppProps): JSX.Element {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(reduce, undefined, initialRunState);
 
@@ -160,7 +155,7 @@ export function App({
 
   const elapsedMs = state.startedAt
     ? (state.done && state.finishedAt ? Date.parse(state.finishedAt) : Date.now()) -
-    Date.parse(state.startedAt)
+      Date.parse(state.startedAt)
     : 0;
   const clampedFindingsIndex = clamp(findingsIndex, findings.length - 1);
   const clampedPatchIndex = clamp(patchIndex, patchSteps.length - 1);

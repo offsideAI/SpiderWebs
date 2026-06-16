@@ -54,7 +54,9 @@ async function main(): Promise<void> {
 
   if (!interactive) {
     if (!args.target) {
-      process.stderr.write('Error: target repository or directory is required in non-interactive mode.\n');
+      process.stderr.write(
+        'Error: target repository or directory is required in non-interactive mode.\n',
+      );
       process.exitCode = 2;
       return;
     }
