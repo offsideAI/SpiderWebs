@@ -387,6 +387,13 @@ network-mutating step requires explicit consent (`--yes` / interactive) and supp
 - [✅] TUI `F`-flow test (confirm + cancel)
 - [✅] CLI `fix` command test with injected fakes (selection, dry-run, --yes, errors)
 
+### Story 16.12 — Fix activity log + streaming + shallow clone ✅
+- [✅] `fix:log` events stream fine-grained activity (workspace path, clone progress, edit, PM output, commit)
+- [✅] Fix clones are shallow (`--depth 1`) — fast on large repos
+- [✅] Package-manager runs stream output line-by-line; clone streams git progress
+- [✅] TUI fix overlay shows a live **Activity log** panel (tail, with the workspace path)
+- [✅] Test: the activity-log panel renders streamed `fix:log` lines
+
 ### Story 16.11 — TUI dry-run mode ✅
 - [✅] `--dry-run` launch flag for the TUI sets dry-run mode on
 - [✅] `D` toggles dry-run mode live; the active mode is shown in the header (`DRY-RUN` badge)

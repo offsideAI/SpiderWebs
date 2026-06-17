@@ -380,8 +380,10 @@ A keyboard-driven Ink app. Three primary views, switchable via tabs / hotkeys.
 - `e` export report (md/json/sarif/html), `c` copy plan to clipboard.
 
 **Guided fix (Findings / Patch plan):**
-- `F` starts a guided fix for the selected package (§5.11): live progress, then a diff + consent
-  prompt before any push/PR.
+- `F` starts a guided fix for the selected package (§5.11): a live **activity-log panel** streams
+  exactly what is happening — the throwaway clone path, clone progress, the manifest edit, the
+  package-manager command and its output, and the commit — then a diff + consent prompt before any
+  push/PR. (Fix clones are shallow for speed.)
 - `D` toggles **dry-run mode**; the current mode is shown in the header. In dry-run, `F` previews
   the diff and the PR it would open without pushing or prompting. Dry-run can also be set at
   launch with `--dry-run`.

@@ -2,7 +2,13 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      // Throwaway fix clones live here during dev; never lint them.
+      '**/.spiderwebs-workspace/**',
+    ],
   },
   ...tseslint.configs.recommended,
   {

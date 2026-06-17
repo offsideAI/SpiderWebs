@@ -1,10 +1,7 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readFile as fsReadFile, writeFile as fsWriteFile } from 'node:fs/promises';
-import { promisify } from 'node:util';
 import { resolveWithin } from '../ingest.js';
 import type { FixPlan, PackageManager } from './planner.js';
-
-const execFileAsync = promisify(execFile);
 
 /**
  * The lockfile-regeneration command per manager. ALWAYS `--ignore-scripts`, and
@@ -21,6 +18,8 @@ export const LOCKFILE_REGEN_ARGS: Record<PackageManager, string[]> = {
 export interface PmRegenInput {
   cwd: string;
   manager: PackageManager;
+  /** Receives each line of package-manager output as it arrives. */
+  onLog?: (message: string) => void;
 }
 
 export interface PmRegenResult {
@@ -35,23 +34,34 @@ export interface PackageManagerRunner {
   regenerateLockfile(input: PmRegenInput): Promise<PmRegenResult>;
 }
 
-/** Real runner: spawns the package manager with scripts disabled. */
+/** Real runner: spawns the package manager with scripts disabled, streaming output. */
 export const defaultPackageManagerRunner: PackageManagerRunner = {
-  async regenerateLockfile({ cwd, manager }): Promise<PmRegenResult> {
+  regenerateLockfile({ cwd, manager, onLog }): Promise<PmRegenResult> {
     const args = LOCKFILE_REGEN_ARGS[manager];
     const command = `${manager} ${args.join(' ')}`;
-    try {
-      const { stdout, stderr } = await execFileAsync(manager, args, {
+    onLog?.(`$ ${command}`);
+    return new Promise((resolve) => {
+      const child = spawn(manager, args, {
         cwd,
         // Defense in depth: also disable scripts via env for tools that read it.
         env: { ...process.env, npm_config_ignore_scripts: 'true' },
-        maxBuffer: 16 * 1024 * 1024,
       });
-      return { ok: true, command, stdout, stderr };
-    } catch (error) {
-      const e = error as { stdout?: string; stderr?: string; message?: string };
-      return { ok: false, command, stdout: e.stdout ?? '', stderr: e.stderr ?? e.message ?? '' };
-    }
+      let stdout = '';
+      let stderr = '';
+      const stream = (buf: Buffer, sink: (s: string) => void): void => {
+        const text = buf.toString();
+        sink(text);
+        for (const line of text.split('\n')) {
+          if (line.trim()) onLog?.(`${manager}: ${line.trim()}`);
+        }
+      };
+      child.stdout.on('data', (b: Buffer) => stream(b, (s) => (stdout += s)));
+      child.stderr.on('data', (b: Buffer) => stream(b, (s) => (stderr += s)));
+      child.on('error', (error) =>
+        resolve({ ok: false, command, stdout, stderr: stderr || error.message }),
+      );
+      child.on('close', (code) => resolve({ ok: code === 0, command, stdout, stderr }));
+    });
   },
 };
 
@@ -70,6 +80,8 @@ export interface ApplyFixOptions {
   root: string;
   runner?: PackageManagerRunner;
   io?: FileIO;
+  /** Receives fine-grained activity lines (the edit, the lockfile command + output). */
+  onLog?: (message: string) => void;
 }
 
 export interface PatchResult {
@@ -108,6 +120,7 @@ export function setDependencyRange(
 export async function applyFix(plan: FixPlan, options: ApplyFixOptions): Promise<PatchResult> {
   const io = options.io ?? defaultFileIO;
   const runner = options.runner ?? defaultPackageManagerRunner;
+  const log = options.onLog;
 
   const manifestAbs = resolveWithin(options.root, plan.manifestPath);
   const manifestBefore = await io.readFile(manifestAbs);
@@ -119,9 +132,20 @@ export async function applyFix(plan: FixPlan, options: ApplyFixOptions): Promise
   const manifestAfter = JSON.stringify(updated, null, indent) + trailingNewline;
   const manifestChanged = manifestAfter !== manifestBefore;
 
+  log?.(
+    `editing ${plan.manifestPath}: ${plan.packageName} "${plan.currentRange}" → "${plan.newRange}"`,
+  );
   if (manifestChanged) await io.writeFile(manifestAbs, manifestAfter);
 
-  const regen = await runner.regenerateLockfile({ cwd: options.root, manager: plan.manager });
+  log?.(`regenerating ${plan.lockfilePath}…`);
+  const regen = await runner.regenerateLockfile({
+    cwd: options.root,
+    manager: plan.manager,
+    ...(log ? { onLog: log } : {}),
+  });
+  log?.(
+    regen.ok ? 'lockfile regenerated' : `lockfile regeneration failed (${regen.stderr.trim()})`,
+  );
 
   return {
     plan,

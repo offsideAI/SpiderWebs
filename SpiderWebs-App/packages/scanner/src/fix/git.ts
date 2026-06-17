@@ -1,4 +1,4 @@
-import { simpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 
 /**
  * Git side effects for the remediation workflow, behind an interface so the
@@ -18,30 +18,56 @@ export interface GitRunner {
   push(dir: string, remote: string, branch: string): Promise<void>;
 }
 
+/**
+ * `git -c` config that routes GitHub auth through the `gh` CLI so pushes are
+ * non-interactive — without this, `git push` over HTTPS prompts for a password
+ * on the terminal, which deadlocks inside the TUI. Because gh supplies the token
+ * before git would ever prompt, the push never blocks on input. The empty first
+ * entry clears any pre-existing helper so we always use gh's token.
+ */
+export const GH_CREDENTIAL_CONFIG = [
+  'credential.helper=',
+  'credential.https://github.com.helper=!gh auth git-credential',
+];
+
+/** simple-git options that enable gh-credential routing and a stall timeout. */
+export const FIX_GIT_OPTIONS = {
+  config: GH_CREDENTIAL_CONFIG,
+  // Our credential-helper value is a fixed constant (gh), not user input.
+  unsafe: { allowUnsafeCredentialHelper: true },
+  // Backstop: abort (with an error) if a git task stalls, instead of hanging forever.
+  timeout: { block: 120_000 },
+} as const;
+
+/** A simple-git bound to `dir` with gh-credential routing and a stall timeout. */
+function gitFor(dir: string): SimpleGit {
+  return simpleGit(dir, FIX_GIT_OPTIONS);
+}
+
 export const defaultGitRunner: GitRunner = {
   async currentBranch(dir) {
-    return (await simpleGit(dir).revparse(['--abbrev-ref', 'HEAD'])).trim();
+    return (await gitFor(dir).revparse(['--abbrev-ref', 'HEAD'])).trim();
   },
   async hasLocalBranch(dir, branch) {
-    const branches = await simpleGit(dir).branchLocal();
+    const branches = await gitFor(dir).branchLocal();
     return branches.all.includes(branch);
   },
   async switchToBranch(dir, branch, create) {
-    const git = simpleGit(dir);
+    const git = gitFor(dir);
     if (create) await git.checkoutLocalBranch(branch);
     else await git.checkout(branch);
   },
   async stageAll(dir) {
-    await simpleGit(dir).add(['--all']);
+    await gitFor(dir).add(['--all']);
   },
   async diffStaged(dir) {
-    return simpleGit(dir).diff(['--staged']);
+    return gitFor(dir).diff(['--staged']);
   },
   async commit(dir, message) {
-    await simpleGit(dir).commit(message);
+    await gitFor(dir).commit(message);
   },
   async ensureRemote(dir, name, url) {
-    const git = simpleGit(dir);
+    const git = gitFor(dir);
     const remotes = await git.getRemotes(true);
     const existing = remotes.find((r) => r.name === name);
     if (existing) {
@@ -51,8 +77,8 @@ export const defaultGitRunner: GitRunner = {
     }
   },
   async push(dir, remote, branch) {
-    // Set upstream, never force.
-    await simpleGit(dir).push(remote, branch, ['--set-upstream']);
+    // Set upstream, never force; auth via gh, never prompt (see gitFor).
+    await gitFor(dir).push(remote, branch, ['--set-upstream']);
   },
 };
 

@@ -80,7 +80,7 @@ export function App({
   const [toast, setToast] = useState<string | undefined>();
   const [, forceTick] = useState(0);
   const [fixSession, setFixSession] = useState<FixSession | null>(null);
-  const [fixSteps, setFixSteps] = useState<string[]>([]);
+  const [fixLog, setFixLog] = useState<string[]>([]);
   const [dryRun, setDryRun] = useState(initialDryRun);
 
   // Subscribe to the same event bus the headless renderer consumes (PRD §7.2).
@@ -118,8 +118,9 @@ export function App({
     );
     if (pkgFindings.length === 0) return flash('no fixable finding for this package');
 
-    setFixSteps([]);
+    setFixLog([]);
     setFixSession({ phase: 'running', pkg: packageName });
+    const append = (line: string): void => setFixLog((log) => [...log, line].slice(-300));
     void onFix({
       target,
       findings: pkgFindings,
@@ -129,7 +130,8 @@ export function App({
           setFixSession({ phase: 'confirm', pkg: packageName, summary, resolve });
         }),
       onEvent: (event) => {
-        if (event.type === 'fix:step') setFixSteps((steps) => [...steps, event.message]);
+        if (event.type === 'fix:step') append(`▸ ${event.message}`);
+        else if (event.type === 'fix:log') append(`  ${event.message}`);
       },
     })
       .then((result) => setFixSession({ phase: 'done', pkg: packageName, result }))
@@ -165,7 +167,7 @@ export function App({
         }
       } else if (fixSession.phase === 'done') {
         setFixSession(null); // any key dismisses the result
-        setFixSteps([]);
+        setFixLog([]);
       }
       return; // 'running' ignores input (no abort mid-flight)
     }
@@ -302,7 +304,7 @@ export function App({
       />
       <Box marginTop={1} flexDirection="column">
         {fixSession ? (
-          <FixOverlay session={fixSession} steps={fixSteps} />
+          <FixOverlay session={fixSession} log={fixLog} />
         ) : showHelp ? (
           <HelpOverlay />
         ) : view === 'progress' ? (
@@ -391,21 +393,39 @@ const FIX_STATUS_COLOR: Record<RunFixResult['status'], string> = {
   error: 'red',
 };
 
-function FixOverlay({ session, steps }: { session: FixSession; steps: string[] }): JSX.Element {
+/** Scrolling tail of the fix activity log (newest at the bottom). */
+function ActivityLog({ log, rows = 14 }: { log: string[]; rows?: number }): JSX.Element {
+  const tail = log.slice(-rows);
+  const hidden = log.length - tail.length;
+  return (
+    <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+      <Text dimColor>Activity log</Text>
+      {hidden > 0 ? <Text dimColor>… {hidden} earlier line(s)</Text> : null}
+      {tail.length === 0 ? (
+        <Text dimColor> starting…</Text>
+      ) : (
+        tail.map((line, i) => (
+          <Text
+            key={i}
+            color={line.startsWith('▸') ? 'cyan' : undefined}
+            dimColor={!line.startsWith('▸')}
+          >
+            {line || ' '}
+          </Text>
+        ))
+      )}
+    </Box>
+  );
+}
+
+function FixOverlay({ session, log }: { session: FixSession; log: string[] }): JSX.Element {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
       <Text bold color="cyan">
         Guided fix — {session.pkg}
       </Text>
-      {steps.length > 0 ? (
-        <Box marginTop={1} flexDirection="column">
-          {steps.map((step, i) => (
-            <Text key={i} dimColor>
-              · {step}
-            </Text>
-          ))}
-        </Box>
-      ) : null}
+
+      <ActivityLog log={log} />
 
       {session.phase === 'running' ? (
         <Box marginTop={1}>

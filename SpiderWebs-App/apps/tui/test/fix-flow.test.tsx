@@ -192,3 +192,33 @@ describe('TUI dry-run mode (D)', () => {
     unmount();
   });
 });
+
+describe('TUI fix activity log', () => {
+  it('streams granular log lines (workspace path, clone progress, the edit)', async () => {
+    const onFix = async (req: FixRequest): Promise<RunFixResult> => {
+      req.onEvent({ type: 'fix:step', step: 'workspace', message: 'preparing throwaway clone' });
+      req.onEvent({ type: 'fix:log', message: 'workspace: ./.spiderwebs-workspace/acme-widgets' });
+      req.onEvent({
+        type: 'fix:log',
+        message: 'cloning https://github.com/acme/widgets (shallow)…',
+      });
+      req.onEvent({ type: 'fix:log', message: 'clone receiving-objects 42%' });
+      req.onEvent({
+        type: 'fix:log',
+        message: 'editing package.json: minimist "^1.2.5" → "^1.2.6"',
+      });
+      return { status: 'dry-run', message: 'would open PR', diff: DIFF, branch: 'b' };
+    };
+    const { lastFrame, stdin, unmount } = await mountWithFindings(onFix, { initialDryRun: true });
+    stdin.write('F');
+    await tick();
+    await tick();
+
+    const frame = strip(lastFrame());
+    expect(frame).toContain('Activity log');
+    expect(frame).toContain('.spiderwebs-workspace/acme-widgets');
+    expect(frame).toContain('clone receiving-objects 42%');
+    expect(frame).toContain('editing package.json');
+    unmount();
+  });
+});

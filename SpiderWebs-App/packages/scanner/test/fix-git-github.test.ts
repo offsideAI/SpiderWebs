@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fixBranchName, fixCommitMessage } from '../src/fix/git.js';
+import {
+  FIX_GIT_OPTIONS,
+  GH_CREDENTIAL_CONFIG,
+  fixBranchName,
+  fixCommitMessage,
+} from '../src/fix/git.js';
 import {
   buildPrBody,
   buildPrTitle,
@@ -29,6 +34,20 @@ describe('fixBranchName', () => {
   it('builds a ref-safe branch and flattens scoped names', () => {
     expect(fixBranchName('lodash', '4.17.21')).toBe('spiderwebs/fix-lodash-4.17.21');
     expect(fixBranchName('@babel/core', '7.20.0')).toBe('spiderwebs/fix-babel-core-7.20.0');
+  });
+});
+
+describe('non-interactive auth (prevents TUI push hangs)', () => {
+  it('routes GitHub auth through the gh CLI credential helper', () => {
+    expect(GH_CREDENTIAL_CONFIG).toContain(
+      'credential.https://github.com.helper=!gh auth git-credential',
+    );
+    expect(FIX_GIT_OPTIONS.config).toBe(GH_CREDENTIAL_CONFIG);
+  });
+
+  it('enables the credential helper and caps stalls so git never hangs forever', () => {
+    expect(FIX_GIT_OPTIONS.unsafe.allowUnsafeCredentialHelper).toBe(true);
+    expect(FIX_GIT_OPTIONS.timeout.block).toBeGreaterThan(0);
   });
 });
 

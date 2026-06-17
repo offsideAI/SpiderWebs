@@ -25,6 +25,8 @@ export type FixStep = 'workspace' | 'plan' | 'patch' | 'commit' | 'fork' | 'push
 
 export type FixEvent =
   | { type: 'fix:step'; step: FixStep; message: string }
+  /** Fine-grained activity line (clone progress, the manifest edit, npm output…). */
+  | { type: 'fix:log'; message: string }
   | { type: 'fix:done'; status: FixStatus; message: string }
   | { type: 'fix:error'; message: string };
 
@@ -90,6 +92,7 @@ export interface RunFixOptions {
  */
 export async function runFix(options: RunFixOptions): Promise<RunFixResult> {
   const emit = (event: FixEvent): void => options.onEvent?.(event);
+  const log = (message: string): void => emit({ type: 'fix:log', message });
   const git = options.git ?? defaultGitRunner;
   const github = options.github ?? defaultGitHubCli;
 
@@ -113,7 +116,9 @@ export async function runFix(options: RunFixOptions): Promise<RunFixResult> {
     ...(options.keep ? { keep: options.keep } : {}),
     ...(options.offline ? { offline: options.offline } : {}),
     ...(options.cloner ? { cloner: options.cloner } : {}),
+    onLog: log,
   });
+  log(`workspace: ${workspace.root}${workspace.reused ? ' (reused)' : ''}`);
 
   let retainWorkspace = false;
   const done = (result: RunFixResult): RunFixResult => {
@@ -157,15 +162,22 @@ export async function runFix(options: RunFixOptions): Promise<RunFixResult> {
     await applyFix(plan, {
       root: workspace.root,
       ...(options.runner ? { runner: options.runner } : {}),
+      onLog: log,
     });
 
     // --- branch + commit ---
     const branch = fixBranchName(plan.packageName, plan.toVersion);
     emit({ type: 'fix:step', step: 'commit', message: `committing on ${branch}` });
+    log(`branch: ${branch}`);
     const branchExists = await git.hasLocalBranch(workspace.root, branch);
     await git.switchToBranch(workspace.root, branch, !branchExists);
     await git.stageAll(workspace.root);
     const diff = await git.diffStaged(workspace.root);
+    const changedFiles = diff
+      .split('\n')
+      .filter((l) => l.startsWith('+++ b/'))
+      .map((l) => l.slice('+++ b/'.length));
+    if (changedFiles.length) log(`staged changes in: ${changedFiles.join(', ')}`);
     if (!diff.trim()) {
       retainWorkspace = false;
       await workspace.cleanup();
@@ -187,6 +199,7 @@ export async function runFix(options: RunFixOptions): Promise<RunFixResult> {
         findingIds: plan.resolvesFindingIds,
       }),
     );
+    log(`committed ${plan.packageName}@${plan.toVersion} on ${branch}`);
 
     const prTitle = buildPrTitle(plan);
 
@@ -271,7 +284,15 @@ export async function runFix(options: RunFixOptions): Promise<RunFixResult> {
     }
 
     emit({ type: 'fix:step', step: 'push', message: `pushing ${branch} → ${pushRemote}` });
-    await git.push(workspace.root, pushRemote, branch);
+    try {
+      await git.push(workspace.root, pushRemote, branch);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `git push failed: ${detail}. If this is an auth problem, run \`gh auth setup-git\` ` +
+          `so git can use your GitHub CLI credentials.`,
+      );
+    }
 
     // --- open or locate the PR (idempotent) ---
     emit({ type: 'fix:step', step: 'pr', message: 'opening pull request' });
